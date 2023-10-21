@@ -1,13 +1,18 @@
 from pathlib import Path
-import json
 from typing import Union
 from collections import Counter
-from hazm import Normalizer, word_tokenize, stopwords_list
+from hazm import Normalizer, word_tokenize
 from wordcloud import WordCloud
-import arabic_reshaper
 from bidi.algorithm import get_display
+
+import arabic_reshaper
+import json
 import matplotlib.pyplot as plt
+import re
+import demoji
+
 from src.data import DATA_DIR
+from src.utils import io
 
 class ChatStatistics:
     """Generates chat statistics from a Telegram chat json file
@@ -22,7 +27,18 @@ class ChatStatistics:
             self.data = json.load(f)
         # Initiate and normalize the stopwords
         self.normalizer = Normalizer()
-        self.stopwords = list(map(self.normalizer.normalize, stopwords_list()))
+        stop_words = open(DATA_DIR / 'stopwords.txt').readlines()
+        stop_words = map(str.strip, stop_words)
+        self.stopwords = set(map(self.normalizer.normalize, stop_words))
+
+    def de_emojify(self, text):
+        """Removes emojis and some special characters from the text.
+
+        :param text: Text that contains emoji
+        """
+        regrex_pattern = re.compile(pattern="[\u2069\u2066]+", flags=re.UNICODE)
+        text = regrex_pattern.sub('', text)
+        return demoji.replace(text, " ")
     
     def generate_wordcloud(self, output_dir: Union[str, Path]):
         """Creates a words cloud to the output file
@@ -39,9 +55,10 @@ class ChatStatistics:
                 text_content += ' '.join(tokens)
         
         # Normalize and reshape the content
+        text_content = self.de_emojify(text_content)
         text_content = self.normalizer.normalize(text_content)
         text_content = arabic_reshaper.reshape(text_content)
-
+        
         # this line of code messes up some texts:
         # text_content = get_display(text_content)
 
