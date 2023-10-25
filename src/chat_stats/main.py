@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Union
-from collections import Counter
-from hazm import Normalizer, word_tokenize
+from collections import Counter, defaultdict
+from hazm import Normalizer, word_tokenize, sent_tokenize
 from wordcloud import WordCloud
 from bidi.algorithm import get_display
 
@@ -40,6 +40,60 @@ class ChatStatistics:
         text = regrex_pattern.sub('', text)
         return demoji.replace(text, " ")
     
+    def generate_is_question(self):
+        self.is_question = defaultdict(bool)
+
+        for msg in self.data['messages']:
+        # Resolve the type conflict of messages
+            if not isinstance(msg['text'], str):
+                msg['text'] = ChatStatistics.rebuild(msg['text'])
+            
+            sentences = sent_tokenize(msg['text'])
+            for sentence in sentences:
+                if ('?' not in sentence) and ('؟' not in sentence):
+                    continue
+                self.is_question[msg['id']] = True
+                break
+
+
+    def generate_stat(self, top_n=10) -> dict:
+        """Creates the frequency of users who replied to questions.
+        """
+        users = list()
+        self.generate_is_question()
+        for msg in self.data['messages']:
+            
+            # Ignore the non-reply messages
+            if 'reply_to_message_id' not in msg:
+                continue
+            # Check if it is replied to a question
+            if self.is_question[msg['reply_to_message_id']] is False:
+                continue
+            users.append(msg['from'])
+        return dict(Counter(users).most_common(top_n))
+
+    @staticmethod
+    def rebuild(sub_msg):
+        """return the joined values of sublists with key of text from this list
+
+        Args:
+            sub_msg (list): sub message that is a list itself
+
+        Returns:
+            str: the joined strings
+        """
+        text = ''
+        if not isinstance(sub_msg, list):
+            return ''
+        for item in sub_msg:
+            if isinstance(item, str):
+                text += f' {item}'
+                continue
+            if 'text' not in item:
+                continue
+            text += f' {item["text"]}'
+        return text
+
     def generate_wordcloud(self, output_dir: Union[str, Path]):
         """Creates a words cloud to the output file
 
@@ -72,4 +126,5 @@ class ChatStatistics:
 
 if __name__ == "__main__":
     data = ChatStatistics(DATA_DIR / 'result.json')
-    data.generate_wordcloud(output_dir=DATA_DIR)
+    # data.generate_wordcloud(output_dir=DATA_DIR)
+    # print(data.generate_stat(10))
